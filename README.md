@@ -1,17 +1,19 @@
-# yolov8_segmentation_tracking_ros [![ROS-noetic Industrial CI](https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/actions/workflows/noetic-ci.yml/badge.svg)](https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/actions/workflows/noetic-ci.yml) [![ROS-noetic Docker Build Check](https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/actions/workflows/noetic-docker-build-check.yml/badge.svg)](https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/actions/workflows/noetic-docker-build-check.yml)
+# yolov8_segmentation_tracking_ros 
 ROS package for real-time object detection and segmentation using the Ultralytics YOLO, enabling flexible integration with various robotics applications.
 
-|  `tracker_node`  |  `tracker_with_cloud_node`  |
-| :------------: | :-----------------------: |
-| <img src="https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/assets/84959376/7ccefee5-1bf9-48de-97e0-a61000bba822" width="450px"> | <img src="https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/assets/84959376/674f352f-5171-4fcf-beb5-394aa3dfe320" height="160px"> |
-
 - The `tracker_node` provides real-time object detection and segmentation on incoming ROS image messages using the Ultralytics YOLO model.
-- The `tracker_with_cloud_node` provides functionality for 3D object detection by integrating 2D detections, mask image, LiDAR data, and camera information.
+
+- roi_visualize provides a visual overlay of the ROI on the camera feed.
+
+- control_bbox computes control commands based on detection outputs and drives the robot accordingly.
+
+![Rviz Sim](misc/output.gif)
 
 ## Setup ⚙
 ```
+$ mkdir -p ~/catkin_ws/src
 $ cd ~/catkin_ws/src
-$ GIT_LFS_SKIP_SMUDGE=1 git clone -b noetic-devel https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros.git
+$ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Nil69420/yolov8_segmentation_tracking_ros.git
 $ python3 -m pip install -r yolov8_segmentation_tracking_ros/requirements.txt
 $ cd ~/catkin_ws
 $ rosdep install -r -y -i --from-paths .
@@ -19,13 +21,9 @@ $ catkin build
 ```
 **NOTE**: If you want to download KITTI datasets, remove `GIT_LFS_SKIP_SMUDGE=1` from the command line.
 ## Run 🚀
-**`tracker_node`**
+
 ```
 $ roslaunch yolov8_segmentation_tracking_ros tracker.launch debug:=true
-```
-**`tracker_node` & `tracker_with_cloud_node`**
-```
-$ roslaunch yolov8_segmentation_tracking_ros tracker_with_cloud.launch debug:=true
 ```
 **NOTE**: If the 3D bounding box is not displayed correctly, please consider using a lighter yolo model(`yolov8n.pt`) or increasing the `voxel_leaf_size`.
 
@@ -34,9 +32,6 @@ $ roslaunch yolov8_segmentation_tracking_ros tracker_with_cloud.launch debug:=tr
 - `yolo_model`: Pre-trained Weights.  
 For yolov8, you can choose `yolov8*.pt`, `yolov8*-seg.pt`.
 
-  |  YOLOv8  |  <img src="https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/assets/84959376/08770080-bf20-470b-8269-eee7a7c41acc" width="350px">  |
-  | :-------------: | :-------------: |
-  |  **YOLOv8-seg**  |  <img src="https://github.com/Alpaca-zip/yolov8_segmentation_tracking_ros/assets/84959376/7bb6650c-769d-41c1-86f7-39fcbf01bc7c" width="350px">  |
   
   See also: https://docs.ultralytics.com/models/
 - `input_topic`: Topic name for input image.
@@ -99,16 +94,54 @@ For yolov8, you can choose `yolov8*.pt`, `yolov8*-seg.pt`.
   - Detected cloud points to `/detection_cloud` topic. ([sensor_msgs/PointCloud2](https://docs.ros.org/en/api/sensor_msgs/html/msg/PointCloud2.html))
   - Detected objects(3D bounding box) to `yolo_3d_result_topic` parameter. ([vision_msgs/Detection3DArray](http://docs.ros.org/en/lunar/api/vision_msgs/html/msg/Detection3DArray.html))
   - Visualization markers to `/detection_marker` topic. ([visualization_msgs/MarkerArray](https://docs.ros.org/en/api/visualization_msgs/html/msg/MarkerArray.html))
-## Docker with KITTI datasets 🐳
-[![dockeri.co](https://dockerico.blankenship.io/image/alpacazip/yolov8_segmentation_tracking_ros)](https://hub.docker.com/r/alpacazip/yolov8_segmentation_tracking_ros)
 
-### Docker Pull & Run
-```
-$ docker pull alpacazip/yolov8_segmentation_tracking_ros:noetic
-$ docker run -p 6080:80 --shm-size=512m alpacazip/yolov8_segmentation_tracking_ros:noetic
-```
-### Run tracker_node & tracker_with_cloud_node
-```
-$ roslaunch yolov8_segmentation_tracking_ros kitti_tracker_with_cloud.launch
-$ cd ~/catkin_ws/src/yolov8_segmentation_tracking_ros/rosbag && rosbag play kitti_2011_09_26_drive_0106_synced.bag --clock --loop
-```
+---
+### `roi_visualize`
+
+This node provides a visual representation of a Region of Interest (ROI) over an image stream.
+
+- **Purpose**:  
+  Draws a polygonal ROI on incoming images and publishes the modified image.
+
+- **Key Functionality**:
+  - Subscribes to the input image topic (in this example, `/zed2i/zed_node/rgb/image_rect_color`).
+  - Converts the ROS image to an OpenCV image.
+  - Draws the ROI polygon defined by four points. The default ROI is given by:
+    ```python
+    self.roi = [[0.4, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]]
+    ```
+  - Publishes the annotated image on `/zed2i/zed_node/image_roi`.
+
+- **Dynamic Reconfigure**:  
+  The node integrates with ROS's dynamic reconfigure server to adjust the ROI parameters on the fly.
+
+- **Code Overview**:
+  - Uses `cv_bridge` to convert between ROS images and OpenCV images.
+  - Applies `cv2.polylines` to draw the ROI polygon.
+
+---
+### `control_bbox`
+
+This node provides a control mechanism based on bounding box detections.
+
+- **Purpose**:  
+  Receives YOLO detection results and computes control commands (using PID control) to adjust the robot's trajectory.
+
+- **Key Functionality**:
+  - Subscribes to the `/yolo_result` topic (custom message: `YoloResult`) containing detection data.
+  - Extracts bounding box centers from detections.
+  - Checks whether a detection falls within a defined ROI (in pixel coordinates).
+  - Uses a PID controller (with parameters `Kp`, `Ki`, `Kd`) to compute angular corrections.
+  - Publishes velocity commands to `/skid_steer/cmd_vel` (message type: `Twist`).
+  - Supports navigation enable/disable via the `/navigation_control` topic (using `Int32` messages) and can reverse the PID control if needed.
+  - Provides services to adjust the linear velocity:
+    - `/set_linear_velocity`
+    - `/decrease_linear_velocity`
+
+- **Algorithm Highlights**:
+  - **PID Control**:  
+    Computes the error between the bounding box center and the image center, applies deadband filtering, and smooths the PID output with a low-pass filter.
+  - **ROI Check**:  
+    The ROI is defined based on the image dimensions. Only detections within this ROI are considered for control.
+  - **Dynamic Behavior**:  
+    The node can switch between normal and reversed control modes based on navigation commands.
