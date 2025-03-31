@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/octobotics/catkin_ws/src/yolov8_segmentation_tracking_ros/build/devel/setup.sh

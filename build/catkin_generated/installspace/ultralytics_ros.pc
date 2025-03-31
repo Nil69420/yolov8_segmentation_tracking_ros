@@ -1,0 +1,8 @@
+prefix=/usr/local
+
+Name: yolov8_segmentation_tracking_ros
+Description: Description of yolov8_segmentation_tracking_ros
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: cv_bridge geometry_msgs image_geometry image_transport message_filters message_runtime pcl_ros roscpp rospy sensor_msgs std_msgs tf2_ros vision_msgs visualization_msgs dynamic_reconfigure

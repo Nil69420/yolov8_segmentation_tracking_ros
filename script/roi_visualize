@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+import rospy
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
+import cv2
+import numpy as np
+from dynamic_reconfigure.server import Server
+from yolov8_segmentation_tracking_ros.cfg import ROIConfigConfig 
+
+class ROIViz:
+    def __init__(self):
+        self.bridge = CvBridge()
+        self.roi = [[0.4, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]]
+        self.image_sub = rospy.Subscriber('/zed2i/zed_node/rgb/image_rect_color', Image, self.image_callback)
+        self.image_pub = rospy.Publisher('/zed2i/zed_node/image_roi', Image, queue_size=10)
+        self.srv = Server(ROIConfigConfig, self.reconfigure_callback)
+
+    def reconfigure_callback(self, config, level):
+        self.roi = [
+            [config.x0, config.y0],
+            [config.x1, config.y1],
+            [config.x2, config.y2],
+            [config.x3, config.y3]
+        ]
+        return config
+
+    def image_callback(self, msg):
+        
+        cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        height, width, _ = cv_image.shape
+
+        
+        roi_pts = [(int(x * width), int(y * height)) for x, y in self.roi]
+
+       
+        cv2.polylines(cv_image, [np.array(roi_pts)], isClosed=True, color=(0, 255, 0), thickness=2)
+
+        
+        ros_image = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
+
+        
+        self.image_pub.publish(ros_image)
+
+if __name__ == '__main__':
+    rospy.init_node('roi_visualize', anonymous=True)
+    roi_viz = ROIViz()
+    rospy.spin()
